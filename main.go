@@ -7,17 +7,14 @@ import (
 	"os"
 )
 
-// Stores our 8-bit signal state (0-255) in server RAM
 var signalByte byte = 0
 
-// Route 1: Handles raw 8-bit binary GET/POST requests from Roblox & Arduino
 func handleSignal(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost {
 		body, err := io.ReadAll(r.Body)
-		// FIXED: Extract the first index body[0] from the byte slice
 		if err == nil && len(body) > 0 {
 			signalByte = body[0]
-			fmt.Printf("📡 Received Bits: %08b (Decimal: %d)\n", signalByte, signalByte)
+			fmt.Printf("📡 Received Bits: %08b\n", signalByte)
 		}
 	}
 	w.Header().Set("Content-Type", "application/octet-stream")
@@ -25,11 +22,14 @@ func handleSignal(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte{signalByte})
 }
 
-// Route 2: Renders a plain web view that displays the bits directly on screen
 func handleWebView(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	
-	html := fmt.Sprintf(`
+	// Pre-convert numbers into simple text strings to avoid Sprintf template bugs
+	binaryText := fmt.Sprintf("%08b", signalByte)
+	decimalText := fmt.Sprintf("%d", signalByte)
+
+	html := `
 	<!DOCTYPE html>
 	<html>
 	<head>
@@ -45,18 +45,18 @@ func handleWebView(w http.ResponseWriter, r *http.Request) {
 	<body>
 		<div class="container">
 			<h2>🕹️ 8-Bit Logic Status</h2>
-			<div>Binary Bits : <span>%%08b</span></div>
-			<div>Decimal Value: <span>%%d</span></div>
+			<div>Binary Bits : <span>` + binaryText + `</span></div>
+			<div>Decimal Value: <span>` + decimalText + `</span></div>
 		</div>
 	</body>
-	</html>`, signalByte, signalByte)
+	</html>`
 
 	w.Write([]byte(html))
 }
 
 func main() {
-	http.HandleFunc("/signal", handleSignal) // For Roblox/Arduino
-	http.HandleFunc("/", handleWebView)      // Displays data right on screen
+	http.HandleFunc("/signal", handleSignal)
+	http.HandleFunc("/", handleWebView)
 	
 	port := os.Getenv("PORT")
 	if port == "" {
