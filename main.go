@@ -10,33 +10,57 @@ import (
 // Stores our 8-bit signal state (0-255) in server RAM
 var signalByte byte = 0
 
+// Route 1: Handles raw 8-bit binary GET/POST requests from Roblox & Arduino
 func handleSignal(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost {
-		// Read the raw 1-byte payload coming from Roblox Build Logic
 		body, err := io.ReadAll(r.Body)
 		if err == nil && len(body) > 0 {
-			signalByte = body[0]
-			// Prints the bits inside the server logs (e.g., 00001111)
+			signalByte = body
 			fmt.Printf("📡 Received Bits: %08b (Decimal: %d)\n", signalByte, signalByte)
 		}
 	}
-
-	// Respond back with the raw 1-byte stream data
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte{signalByte})
 }
 
-func main() {
-	// A single clean endpoint handling both GET and POST requests
-	http.HandleFunc("/signal", handleSignal)
+// Route 2: Renders a plain web view that displays the bits directly on screen
+func handleWebView(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	
+	// Ultra-simple HTML page that auto-refreshes every 1 second
+	html := fmt.Sprintf(`
+	<!DOCTYPE html>
+	<html>
+	<head>
+		<title>8-Bit Signal Monitor</title>
+		<meta http-equiv="refresh" content="1">
+		<style>
+			body { font-family: monospace; background: #121212; color: #00ff00; padding: 40px; font-size: 24px; line-height: 1.6; }
+			.container { max-width: 500px; margin: 0 auto; border: 1px solid #00ff00; padding: 20px; border-radius: 5px; background: #1a1a1a; }
+			h2 { color: #ffffff; margin-top: 0; border-bottom: 1px solid #00ff00; padding-bottom: 10px; }
+			span { color: #ffff00; font-weight: bold; }
+		</style>
+	</head>
+	<body>
+		<div class="container">
+			<h2>🕹️ 8-Bit Logic Status</h2>
+			<div>Binary Bits : <span>%08b</span></div>
+			<div>Decimal Value: <span>%d</span></div>
+		</div>
+	</body>
+	</html>`, signalByte, signalByte)
 
-	// Fetch port assigned by cloud host (Render defaults to 8080)
+	w.Write([]byte(html))
+}
+
+func main() {
+	http.HandleFunc("/signal", handleSignal) // Kept for Roblox & Arduino binary traffic
+	http.HandleFunc("/", handleWebView)      // Displays the data right on the screen
+	
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
-
-	fmt.Printf("🏎️ High-Speed Go API listening on port %s...\n", port)
 	http.ListenAndServe(":"+port, nil)
 }
