@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template_string
+from flask import Flask, request, render_template_string, jsonify
 
 app = Flask(__name__)
 
@@ -20,11 +20,12 @@ def handle_signal():
                     pass
             print(f"📡 Signal via Roblox: {signal_byte}")
 
-    # --- 🛠️ FIXED: Return the exact 8-bit binary string (e.g., "01100101") ---
-    # This prevents the Roblox block from parsing base-10 decimals incorrectly
+    # --- 🛠️ FIXED FOR BUILD LOGIC: Return a valid JSON format ---
+    # Convert the decimal into an 8-bit binary string (e.g., "01100101")
     binary_payload = bin(signal_byte)[2:].zfill(8)
     
-    return binary_payload, 200, {'Content-Type': 'text/plain; charset=utf-8'}
+    # Wrap it inside a proper JSON dictionary so the Roblox block can parse it smoothly!
+    return jsonify({"value": binary_payload})
 
 @app.route('/set_value', methods=['POST'])
 def set_value():
@@ -110,27 +111,23 @@ def handle_web_view():
                 }}
             }}
 
-            function sendValueToServer(val) {{
-                fetch('/set_value', {{ method: 'POST', body: val.toString() }});
-            }}
-
-            // Keep UI refreshing smoothly. We use text length check to handle binary string responses cleanly
+            // Keep browser refreshing properly by extracting 'value' string out of JSON
             setInterval(() => {{
                 fetch('/signal')
-                    .then(res => res.text())
-                    .then(text => {{
-                        let num = 0;
-                        if (text.length === 8) {{
-                            num = parseInt(text, 2) || 0;
-                        }} else {{
-                            num = parseInt(text) || 0;
-                        }}
+                    .then(res => res.json())
+                    .then(json => {{
+                        let text = json.value || "00000000";
+                        let num = parseInt(text, 2) || 0;
                         currentVal = num;
-                        document.getElementById('bits').innerText = num.toString(2).padStart(8, '0');
+                        document.getElementById('bits').innerText = text;
                         document.getElementById('dec').innerText = num.toString(10);
                         updateButtonUI(num);
                     }});
             }}, 1000);
+
+            function sendValueToServer(val) {{
+                fetch('/set_value', {{ method: 'POST', body: val.toString() }});
+            }}
 
             updateButtonUI(currentVal);
         </script>
