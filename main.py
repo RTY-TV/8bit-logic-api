@@ -8,31 +8,33 @@ signal_byte = 0
 @app.route('/signal', methods=['GET', 'POST'])
 def handle_signal():
     global signal_byte
-    
     if request.method == 'POST':
-        # Safely extracts the data from the 'value' input box inside your green block
         val_str = request.form.get('value', '')
-        
         if val_str:
             try:
-                # Case A: If Build Logic sends a decimal integer (e.g., "15")
                 signal_byte = int(val_str)
             except ValueError:
                 try:
-                    # Case B: If Build Logic sends a raw binary string (e.g., "00001111")
                     signal_byte = int(val_str, 2)
                 except ValueError:
                     pass
-            print(f"📡 Signal Updated: {bin(signal_byte)[2:].zfill(8)} (Decimal: {signal_byte})")
+            print(f"📡 Signal via Roblox: {signal_byte}")
 
-    # Return the clean current state back to the game as a fast plain-text string
     return str(signal_byte), 200, {'Content-Type': 'text/plain; charset=utf-8'}
+
+# New route that lets your browser buttons change the cloud data
+@app.route('/set_value', methods=['POST'])
+def set_value():
+    global signal_byte
+    val = request.data.decode('utf-8')
+    if val.isdigit():
+        signal_byte = int(val) & 0xFF  # Bound to 8-bit max (255)
+        return "OK", 200
+    return "Error", 400
 
 @app.route('/')
 def handle_web_view():
     global signal_byte
-    
-    # Generate human-readable string formats for our auto-refreshing interface
     binary_text = bin(signal_byte)[2:].zfill(8)
     decimal_text = str(signal_byte)
 
@@ -42,30 +44,92 @@ def handle_web_view():
     <head>
         <title>8-Bit Signal Monitor</title>
         <style>
-            body {{ font-family: monospace; background: #121212; color: #00ff00; padding: 40px; font-size: 24px; line-height: 1.6; }}
-            .container {{ max-width: 500px; margin: 0 auto; border: 1px solid #00ff00; padding: 20px; border-radius: 5px; background: #1a1a1a; }}
+            body {{ font-family: monospace; background: #121212; color: #00ff00; padding: 40px; font-size: 24px; text-align: center; }}
+            .container {{ max-width: 600px; margin: 0 auto; border: 1px solid #00ff00; padding: 20px; border-radius: 5px; background: #1a1a1a; }}
             h2 {{ color: #ffffff; margin-top: 0; border-bottom: 1px solid #00ff00; padding-bottom: 10px; }}
             span {{ color: #ffff00; font-weight: bold; }}
+            .bit-row {{ display: flex; justify-content: center; gap: 10px; margin: 25px 0; }}
+            .bit-btn {{ background: #333; color: #888; border: 2px solid #555; padding: 10px 15px; border-radius: 4px; font-weight: bold; cursor: pointer; font-family: monospace; font-size: 18px; }}
+            .bit-btn.active {{ background: #00ff00; color: #000; border-color: #00ff00; box-shadow: 0 0 10px #00ff00; }}
+            .input-box {{ background: #000; border: 1px solid #00ff00; color: #ffff00; padding: 8px; font-size: 18px; font-family: monospace; width: 100px; text-align: center; border-radius: 4px; }}
+            .submit-btn {{ background: #00ff00; color: #000; font-weight: bold; padding: 8px 15px; font-size: 18px; border: none; cursor: pointer; border-radius: 4px; margin-left: 5px; }}
         </style>
     </head>
     <body>
         <div class="container">
-            <h2>🕹️ 8-Bit Logic Status</h2>
+            <h2>🕹️ Interactive 8-Bit Controller</h2>
             <div>Binary Bits : <span id="bits">{binary_text}</span></div>
             <div>Decimal Value: <span id="dec">{decimal_text}</span></div>
+
+            <!-- Clickable Interactive Bits Row -->
+            <div class="bit-row">
+                <button class="bit-btn" onclick="toggleBit(7)">B7</button>
+                <button class="bit-btn" onclick="toggleBit(6)">B6</button>
+                <button class="bit-btn" onclick="toggleBit(5)">B5</button>
+                <button class="bit-btn" onclick="toggleBit(4)">B4</button>
+                <button class="bit-btn" onclick="toggleBit(3)">B3</button>
+                <button class="bit-btn" onclick="toggleBit(2)">B2</button>
+                <button class="bit-btn" onclick="toggleBit(1)">B1</button>
+                <button class="bit-btn" onclick="toggleBit(0)">B0</button>
+            </div>
+
+            <!-- Custom Number Entry Field -->
+            <div>
+                <input type="number" id="numInput" class="input-box" min="0" max="255" placeholder="0-255">
+                <button class="submit-btn" onclick="sendInputVal()">Set</button>
+            </div>
         </div>
 
         <script>
-            // Background interval that forces sync and feeds UptimeRobot every 1s
+            let currentVal = {signal_byte};
+
+            // Updates active/inactive styles on buttons based on bits
+            function updateButtonUI(val) {{
+                for(let i=0; i<8; i++) {{
+                    let btn = document.querySelectorAll('.bit-btn')[7-i];
+                    if(((val >> i) & 1) === 1) {{
+                        btn.classList.add('active');
+                        btn.innerText = "1";
+                    }} else {{
+                        btn.classList.remove('active');
+                        btn.innerText = "0";
+                    }}
+                }}
+            }}
+
+            // Handles clicking a bit button
+            function toggleBit(bitIndex) {{
+                currentVal ^= (1 << bitIndex); // XOR bitflip
+                sendValueToServer(currentVal);
+            }}
+
+            // Handles typing a custom number
+            function sendInputVal() {{
+                let val = parseInt(document.getElementById('numInput').value);
+                if(!isNaN(val) && val >= 0 && val <= 255) {{
+                    currentVal = val;
+                    sendValueToServer(currentVal);
+                }}
+            }}
+
+            function sendValueToServer(val) {{
+                fetch('/set_value', {{ method: 'POST', body: val.toString() }});
+            }}
+
+            // Keep UI refreshing smoothly every 1 second
             setInterval(() => {{
                 fetch('/signal')
                     .then(res => res.text())
                     .then(text => {{
                         let num = parseInt(text) || 0;
+                        currentVal = num;
                         document.getElementById('bits').innerText = num.toString(2).padStart(8, '0');
                         document.getElementById('dec').innerText = num.toString(10);
-                    }}).catch(err => console.log("Ping failed..."));
+                        updateButtonUI(num);
+                    }});
             }}, 1000);
+
+            updateButtonUI(currentVal);
         </script>
     </body>
     </html>"""
