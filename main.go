@@ -14,8 +14,9 @@ var signalByte byte = 0
 func handleSignal(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost {
 		body, err := io.ReadAll(r.Body)
+		// FIXED: Extract the first index body[0] from the byte slice
 		if err == nil && len(body) > 0 {
-			signalByte = body
+			signalByte = body[0]
 			fmt.Printf("📡 Received Bits: %08b (Decimal: %d)\n", signalByte, signalByte)
 		}
 	}
@@ -28,7 +29,6 @@ func handleSignal(w http.ResponseWriter, r *http.Request) {
 func handleWebView(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	
-	// Ultra-simple HTML page that auto-refreshes every 1 second
 	html := fmt.Sprintf(`
 	<!DOCTYPE html>
 	<html>
@@ -45,8 +45,8 @@ func handleWebView(w http.ResponseWriter, r *http.Request) {
 	<body>
 		<div class="container">
 			<h2>🕹️ 8-Bit Logic Status</h2>
-			<div>Binary Bits : <span>%08b</span></div>
-			<div>Decimal Value: <span>%d</span></div>
+			<div>Binary Bits : <span>%%08b</span></div>
+			<div>Decimal Value: <span>%%d</span></div>
 		</div>
 	</body>
 	</html>`, signalByte, signalByte)
@@ -55,8 +55,8 @@ func handleWebView(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	http.HandleFunc("/signal", handleSignal) // Kept for Roblox & Arduino binary traffic
-	http.HandleFunc("/", handleWebView)      // Displays the data right on the screen
+	http.HandleFunc("/signal", handleSignal) // For Roblox/Arduino
+	http.HandleFunc("/", handleWebView)      // Displays data right on screen
 	
 	port := os.Getenv("PORT")
 	if port == "" {
